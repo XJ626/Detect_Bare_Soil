@@ -1,0 +1,81 @@
+// Import required packages
+var ATBSD = require('users/xj2019/Bare_Soil_Detect:lib/BareSoilDetect'); 
+var DS = require('users/xj2019/Bare_Soil_Detect:lib/Sentinel');
+
+// Import boundary
+var boundary = ee.FeatureCollection('users/xj2019/China_Boundary').geometry();
+// Import satellites
+var Satellite = DS.introduceHarmonizedSentinel2A('2020-03-01', '2020-04-01', boundary);
+// Perform bare soil detect
+var GEOS3 = ATBSD.GEOS3(Satellite, 'globe').median().clip(boundary);
+var BPC = ATBSD.BPC(Satellite).median().clip(boundary);
+var BSC = ATBSD.BSC(Satellite).median().clip(boundary);
+var SCMaP = ATBSD.SCMaP(Satellite, 0.8409, 1.6956).median().clip(boundary);
+var TDBSS = ATBSD.TDBSS(Satellite, 0.0759, 0.0762, 0.35).median().clip(boundary); // change according to the region
+
+// Display
+var visualization = {
+  bands: ['red', 'green', 'blue'],
+  min: 0.0,
+  max: 0.3,
+};
+Map.addLayer(boundary, {},'boundary');
+Map.addLayer(GEOS3, visualization,'GEOS3');
+Map.addLayer(BPC, visualization,'BPC');
+Map.addLayer(BSC, visualization,'BSC');
+Map.addLayer(SCMaP, visualization,'SCMaP');
+Map.addLayer(TDBSS, visualization,'TDBSS');
+
+// Export images to drive
+Export.image.toDrive({
+  'image': GEOS3,
+  'description': 'GEOS3',
+  'folder': 'Bare_Soil_Detect',
+  'region': boundary,
+  'scale': 10000,
+  'crs': 'EPSG:4326',
+  'maxPixels': 1E13,
+  'fileFormat': 'GeoTIFF'
+});  
+Export.image.toDrive({
+  'image': BPC,
+  'description': 'BPC',
+  'folder': 'Bare_Soil_Detect',
+  'region': boundary,
+  'scale': 10000,
+  'crs': 'EPSG:4326',
+  'maxPixels': 1E14,
+  'fileFormat': 'GeoTIFF'
+}); 
+Export.image.toDrive({
+  'image': BSC,
+  'description': 'BSC',
+  'folder': 'Bare_Soil_Detect',
+  'region': boundary,
+  'scale': 10000,
+  'crs': 'EPSG:4326',
+  'maxPixels': 1E14,
+  'fileFormat': 'GeoTIFF'
+});  
+Export.image.toDrive({
+  'image': SCMaP,
+  'description': 'SCMaP',
+  'folder': 'Bare_Soil_Detect',
+  'region': boundary,
+  'scale': 10000,
+  'crs': 'EPSG:4326',
+  'maxPixels': 1E14,
+  'fileFormat': 'GeoTIFF'
+}); 
+Export.image.toDrive({
+  'image': TDBSS,
+  'description': 'TDBSS',
+  'folder': 'Bare_Soil_Detect',
+  'region': boundary,
+  'scale': 10000,
+  'crs': 'EPSG:4326',
+  'maxPixels': 1E14,
+  'fileFormat': 'GeoTIFF'
+}); 
+
+
