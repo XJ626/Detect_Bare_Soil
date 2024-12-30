@@ -1,0 +1,317 @@
+// Error Handling function
+function error(functionName, message) {
+    print('------------------  ATBSD  --------------------');
+    print('Error in function:' + functionName.toString());
+    print(message.toString());
+    print('------------------  ATBSD  --------------------');
+}
+
+/*
+  GEOS3:
+  Function to detect bare soil pixel with the Geospatial Soil Sensing System (GEOS3) method.
+  
+  Origin from:
+  region method: Geospatial Soil Sensing System (GEOS3): A powerful data mining procedure to retrieve soil spectral reflectance from satellite images.
+  globe method: Bare Earth’s Surface Spectra as a Proxy for Soil Resource Monitoring.
+  
+  Params:
+  obligatory (ImagCollection) imagecollection - The input imagecollection to be used to detect bare soil.
+  obligatory (String) mode - The input mode to choose the processing mode, i.e. 'region' and 'globe'. 
+  optional (Number) threshold - The input threshold to limit the up threshold of NBR2, only be essential in the region mode.
+  
+
+  Usage:
+  var ATBSD = require('users/xj2019/Bare_Soil_Detetct:lib/BareSoilDetect'); 
+  var GEOS3 = ATBSD.GEOS3(imagecollection, mode, threshold);
+*/
+
+var GEOS3 = function(imagecollection, mode, threshold){
+  // Error Handling
+  if (imagecollection === undefined) error('GEOS3', 'You need to specify an input imagecollection.');
+  if (mode === undefined) error('GEOS3', 'You need to specify a specific mode, i.e. "region" or "globe".');
+  // Default params
+  imagecollection = ee.ImageCollection(imagecollection);
+
+  // Function to calculate related spectra indices
+  function calculateIndex(image){
+    var NDVI = image.normalizedDifference(['nir', 'red']).rename("NDVI");
+    var NBR2 = image.normalizedDifference(['swir1', 'swir2']).rename("NBR2");
+    var VNSIR = image.expression(
+    '1 - ((2 * red - green - blue) + 3 * (swir2 - nir))', {
+      'red': image.select('red'),
+      'green': image.select('green'),
+      'blue': image.select('blue'),
+      'swir2': image.select('swir2'),
+      'nir': image.select('nir')
+    }).rename('VNSIR');
+    var GB =  image.select('green').subtract(image.select('blue')).rename('GB');
+    var RG =  image.select('red').subtract(image.select('green')).rename('RG');
+    return image.addBands([NDVI, NBR2, VNSIR, GB, RG]);}
+  // Function to detect bare soil in region mode
+  function detectRegionSoil (image){
+    var NDVIMask = image.select('NDVI').gt(0)
+                        .and(image.select('NDVI').lt(0.25));
+    var GBMask =  image.select('GB').gt(0);
+    var RGMask =  image.select('RG').gt(0);
+    var NBR2Mask = image.select('NBR2').gt(0)
+                        .and(image.select('NBR2').lt(threshold));
+    var SoilMask = NDVIMask.and(GBMask).and(RGMask)
+                           .and(NBR2Mask).rename('SoilMask');
+    return image.addBands(SoilMask);}
+  // Function to detect bare soil in globe model
+  function detectGlobeSoil (image){
+    var NDVIMask = image.select('NDVI').gt(-0.25)
+                        .and(image.select('NDVI').lt(0.25));
+    var NBR2Mask = image.select('NBR2').gt(-0.3)
+                        .and(image.select('NBR2').lt(0.1));
+    var VNSIRMask = image.select('VNSIR').lt(0.9);
+    var SoilMask = NDVIMask.and(NBR2Mask).and(VNSIRMask).rename('SoilMask');
+    return image.addBands(SoilMask);}
+  // Function to updatemask soil pixel
+  function getSoilPixel (image){
+    return image.updateMask(image.select('SoilMask').eq(1));}
+  // Perform the process
+  if (mode === 'region'){
+    if (threshold === undefined) error('GEOS3', 'You need to specify an input NBR2 threshold in the region,' + '\n' +
+    'in the orginal paper the values are 0.025, 0.075, 0.150, 0.225, 0.300 and 0.350.');
+    threshold = ee.Number(threshold);
+    return imagecollection.map(calculateIndex)
+                          .map(detectRegionSoil)
+                          .map(getSoilPixel);}
+    else if (mode === 'globe'){
+    return imagecollection.map(calculateIndex)
+                          .map(detectGlobeSoil)
+                          .map(getSoilPixel);}
+};
+
+/*
+  BPC:
+  Function to detect bare soil pixel with the Barest Pixel Composite (BPC) method.
+  
+  Origin from:
+  Barest Pixel Composite for Agricultural Areas Using Landsat Time Series.
+  
+  Params:
+  obligatory (ImagCollection) imagecollection - The input imagecollection to be used to detect bare soil.
+
+  Usage:
+  var ATBSD = require('users/xj2019/Bare_Soil_Detetct:lib/BareSoilDetect'); 
+  var BPC = ATBSD.BPC(imagecollection);
+*/
+
+var BPC = function(imagecollection){
+  // Error Handling
+  if (imagecollection === undefined) error ('BPC', 'You need to specify an input imagecollection.');
+  // Default params
+  imagecollection = ee.ImageCollection(imagecollection);
+  // Function to calculate related spectra indices
+  function calculateIndex(image){
+    var BSI = image.expression(
+      '((swir2 + red) - (nir + blue)) /((swir2 + red) + (nir + blue)) ', 
+      {
+        'red': image.select('red'),
+        'blue': image.select('blue'),
+        'swir2': image.select('swir2'),
+        'nir': image.select('nir')
+      }).rename('BSI');
+  return image.addBands(BSI);}
+  // Function to detect bare soil 
+  function detectSoil (image){
+    var BSIMask = image.select('BSI').gt(0.021).rename('SoilMask');
+    return image.addBands(BSIMask);}
+  // Function to updatemask soil pixel
+  function getSoilPixel (image){
+    return image.updateMask(image.select('SoilMask').eq(1));}
+  // Perform the process
+  return imagecollection.map(calculateIndex)
+                        .map(detectSoil)
+                        .map(getSoilPixel);
+};  
+  
+/*
+  BSC:
+  Function to detect bare soil pixel with the Bare Soil Composite (BSC) method.
+  
+  Origin from:
+  Predictive soil mapping using historic bare soil composite imagery and legacy soil survey data.
+  
+  Params:
+  obligatory (ImagCollection) imagecollection - The input imagecollection to be used to detect bare soil.
+
+  Usage:
+  var ATBSD = require('users/xj2019/Bare_Soil_Detetct:lib/BareSoilDetect'); 
+  var BSC = ATBSD.BSC(imagecollection);
+*/
+var BSC = function(imagecollection){
+  // Error Handling
+  if (imagecollection === undefined) error ('BSC', 'You need to specify an input imagecollection.');
+  // Default params
+  imagecollection = ee.ImageCollection(imagecollection);
+
+  // Function to calculate related spectra indices
+  function calculateIndex(image){
+    var NDVI = image.normalizedDifference(['nir', 'red']).rename("NDVI");
+    var NBR2 = image.normalizedDifference(['swir1', 'swir2']).rename("NBR2");
+    var NDWI = image.normalizedDifference(['green', 'nir']).rename("NDWI");
+    var NDI7 = image.normalizedDifference(['nir', 'swir2']).rename("NDI7");
+    return image.addBands([NDVI, NBR2, NDWI, NDI7]);}
+  // Function to detect bare soil in region mode
+  function detectSoil (image){
+    var NDVIMask = image.select('NDVI').lt(0.3);
+    var NBR2Mask = image.select('NBR2').lt(0.1);
+    var NDWIMask = image.select('NDWI').lt(0.5);
+    var NDI7Mask = image.select('NDI7').lt(0);
+    var SoilMask = NDVIMask.and(NBR2Mask).and(NDWIMask)
+                           .and(NDI7Mask).rename('SoilMask');
+    return image.addBands(SoilMask);}
+  // Function to updatemask soil pixel
+  function getSoilPixel (image){
+    return image.updateMask(image.select('SoilMask').eq(1));}
+  
+  return imagecollection.map(calculateIndex)
+                        .map(detectSoil)
+                        .map(getSoilPixel);
+};
+
+/*
+  SCMaP:
+  Function to detect bare soil pixel with the Exposed Soil Composite Processor (SCMaP) method.
+  
+  Origin from:
+  Building an exposed soil composite processor (SCMaP) for mapping spatial and temporal characteristics of soils with Landsat imagery (1984–2014).
+  
+  Params:
+  obligatory (ImagCollection) imagecollection - The input imagecollection to be used to detect bare soil.
+  obligatory (Number) minthreshold - The input minthreshold to limit the minimum of PV.
+  obligatory (Number) maxthreshold - The input minthreshold to limit the maximum of PV.
+ 
+
+  Usage:
+  var ATBSD = require('users/xj2019/Bare_Soil_Detetct:lib/BareSoilDetect'); 
+  var SCMaP = ATBSD.SCMaP(imagecollection, minthreshold, maxthreshold);
+*/
+
+var SCMaP = function(imagecollection, minthreshold, maxthreshold){
+  // Error Handling
+  if (imagecollection === undefined) error('SCMaP', 'You need to specify an input imagecollection.');
+  if (minthreshold === undefined) error('SCMaP', 'You need to specify a specific min PV threshold');
+  if (maxthreshold === undefined) error('SCMaP', 'You need to specify a specific max PV threshold');
+  // Default params
+  imagecollection = ee.ImageCollection(imagecollection);
+  var min = ee.Number(minthreshold);
+  var max = ee.Number(maxthreshold);
+
+  // Function to calculate related spectra indices
+  function calculateIndex(image){
+    var PV = image.expression(
+    "((nir - red) / (nir + red)) + ((nir - blue) / (nir + blue))",
+    {
+      "nir" : image.select("nir"),
+      "red" : image.select("red"),
+      "blue" : image.select("blue")
+    }).rename("PV");
+    return image.addBands(PV);}
+  // Function to detect bare soil in region mode
+  function detectSoil (image){
+    var SoilMask = image.select('PV').gt(min)
+                        .and(image.select('PV').lt(max))
+                        .rename('SoilMask');
+    return image.addBands(SoilMask);}
+  // Function to updatemask soil pixel
+  function getSoilPixel (image){
+    return image.updateMask(image.select('SoilMask').eq(1));}
+  // Perform the process
+  return imagecollection.map(calculateIndex)
+                        .map(detectSoil)
+                        .map(getSoilPixel);
+};
+
+/*
+  TDBSS:
+  Function to detect bare soil pixel with the Two-dimensional Bare Soil Separation (SCMaP) method.
+  
+  Origin from:
+  A two-dimensional bare soil separation framework using multi-temporal Sentinel-2 images across China.
+  
+  Params:
+  obligatory (ImagCollection) imagecollection - The input imagecollection to be used to detect bare soil.
+  obligatory (Number) ndri_threshold - The input minthreshold to limit the NDRI.
+  obligatory (Number) savi_threshold - The input minthreshold to limit the SAVI.
+  obligatory (Number) nbr2_threshold - The input minthreshold to limit the NBR2.
+
+  Usage:
+  var ATBSD = require('users/xj2019/Bare_Soil_Detetct:lib/BareSoilDetect'); 
+  var TDBSS = ATBSD.TDBSS(imagecollection, ndri_threshold, savi_threshold, nbr2_threshold);
+*/
+var TDBSS = function(imagecollection, ndri_threshold, savi_threshold, nbr2_threshold) {
+  // Error Handling
+  if (imagecollection === undefined) error('TDBSS', 'You need to specify an input imagecollection.');
+  if (ndri_threshold === undefined) error('TDBSS', 'You need to specify a specific threshold for NDVI');
+  if (savi_threshold === undefined) error('TDBSS', 'You need to specify a specific threshold for SAVI');
+  if (nbr2_threshold === undefined) error('TDBSS', 'You need to specify a specific threshold for NBR2');
+  // Default params
+  imagecollection = ee.ImageCollection(imagecollection);
+  var ndri_value = ee.Number(ndri_threshold);
+  var savi_value = ee.Number(savi_threshold);
+  var nbr2_value = ee.Number(nbr2_threshold);
+  // Function to calculate related spectra indices
+  function calculateIndex(image){
+  // Normalized difference vagetation index (NDVI)
+  var NDVI = image.normalizedDifference(['nir', 'red']).rename('NDVI');
+  // Soil-adjusted vegetation index (SAVI)
+  var SAVI = image.expression(
+    '((nir - red)/ (nir + red + 0.5)) * 1.5', {
+      'nir': image.select('nir'),
+      'red': image.select('red'),
+    }).rename('SAVI');
+  // NDRI
+  var NDRI = image.normalizedDifference(['red', 'green']).rename('NDRI');
+  var GB =  image.select('green').subtract(image.select('blue')).rename('GB');
+  var RG =  image.select('red').subtract(image.select('green')).rename('RG');
+  var NBR2 = image.normalizedDifference(['swir1', 'swir2']).rename("NBR2");
+  var EVI = image.expression(
+    '2.5 * ((nir - red) / (nir + 6 * red - 7.5 * blue + 1))', {
+      'nir': image.select('nir'),
+      'red': image.select('red'),
+      'blue': image.select('blue')}).rename('EVI');
+  var mNDWI = image.normalizedDifference(['green', 'swir1']).rename('mNDWI');
+
+  return image.addBands([NDVI, SAVI, NDRI, GB, RG, NBR2, EVI, mNDWI]);}  
+  // detct the water body
+  function water_detect(image){
+    var water_bol = image.select('mNDWI').gt(image.select('EVI'))
+                        .or(image.select('mNDWI').gt(image.select('NDVI')))
+                        .and(image.select('EVI').lt(0.1)).rename('water');
+  return image.addBands(water_bol);}
+  // function to detect the bare soil
+  function detectSoil (image){
+    var NDRIMask = image.select('NDRI').gt(ndri_value);
+    var SAVIMask = image.select('SAVI').gt(savi_value);                    
+    var GBMask =  image.select('GB').gt(0);
+    var RGMask =  image.select('RG').gt(0);
+    var NBR2Mask = image.select('NBR2').gt(0)
+                        .and(image.select('NBR2').lt(nbr2_threshold));
+    var SoilMask = NDRIMask.and(GBMask).and(RGMask)
+                           .and(NBR2Mask)
+                           .and(SAVIMask)
+                           .rename('SoilMask');
+    return image.addBands(SoilMask);}
+  // Function to updatemask soil pixel
+  function getSoilPixelwithoutwater (image){
+    return image.updateMask(image.select('SoilMask').eq(1))
+                .updateMask(image.select('water').neq(1));}
+  // Perform the process
+  return imagecollection.map(calculateIndex)
+                        .map(detectSoil)
+                        .map(water_bol)
+                        .map(getSoilPixelwithoutwater);
+  
+};
+  
+/* ------------------------  EXPORTS  ------------------------ */
+exports.GEOS3 = GEOS3;
+exports.BPC = BPC;
+exports.BSC = BSC;
+exports.SCMaP = SCMaP;
+exports.TDBSS = TDBSS;
+
