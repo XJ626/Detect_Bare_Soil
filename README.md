@@ -7,14 +7,12 @@ We proposed a Two-Dimensional Bare Soil Separation (TDBSS) framework to generate
 ## Main framework
 This study aims to: (1) propose an effective method to distinguish vegetation (i.e., photosynthetically active areas of cropland, the same below), straw, and impervious surface from bare soil
 by separating hidden information in two-dimensional space and determining thresholds with the confidence ellipse method, and generate a continuous bare soil map over China at 10-m spatial resolution; (2) make a comprehensive evaluation on three prevalent bare soil extraction algorithms (BPC, SCMaP and GEOS3) for their areal and spatial accuracy. The main process is as follows.
-
                                                       ![image](https://github.com/user-attachments/assets/f1903f50-6f8b-4507-82b2-fe4dcdd79648)
                                                       
                                                                   Fig.1 The main workflow of TDBSS method and this study.
                                                                   
 ### Sentinel-2 image acquisition and treatments
 Sentinel-2 Multi-Spectral Imager constellation includes two satellite sensors (2A and 2B), with a five-day revisiting period. It provides 13 spectral bands with different spatial resolution at 10 m, 20 m or 60 m. For the study area, the Level-2A products during the period from 1 January 2018 to 31 December 2022 were downloaded via Google Earth Engine. These products have been geometrically and radiometrically corrected. To acquire the high-quality images, the QA band was applied remove clouds and cirrus furtherly. Finally, we obtained the available cloud-free Sentinel-2 images, presenting an escalating pattern from the south towards the north. The six bands were used in this study for both the creation of true color composites and the calculation of various indices, covering the visible (B2-B4), NIR (B8), and SWIR (B11, B12) regions. All the bands were resampled to a 10-m spatial resolution using the bilinear method and projected into the WGS84 Geographic Latitude-Longitude system.
-
                                                       ![image](https://github.com/user-attachments/assets/c4b399b6-5b85-496f-93e0-320ae161a85c)
                                                       
                                                     Fig.2 The image count of Sentinel-2 scenes used in the per pixel compositing for this study.
