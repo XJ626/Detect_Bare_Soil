@@ -35,15 +35,22 @@ Fig.4 The spatial agreement between bare soil map and cropland dataset.
 
 ## Reference:
 [1] Xue J, Zhang X, Huang Y, et al. A two-dimensional bare soil separation framework using multi-temporal Sentinel-2 images across China[J]. International Journal of Applied Earth Observation and Geoinformation, 2024, 134: 104181.
+
 [2] Demattê J A M, Fongaro C T, Rizzo R, et al. Geospatial Soil Sensing System (GEOS3): A powerful data mining procedure to retrieve soil spectral reflectance from satellite images[J]. Remote Sensing of Environment, 2018, 212: 161-175.
+
 [3] Demattê J A M, Safanelli J L, Poppiel R R, et al. Bare earth’s surface spectra as a proxy for soil resource monitoring[J]. Scientific reports, 2020, 10(1): 4461.
+
 [4] Diek S, Fornallaz F, Schaepman M E, et al. Barest pixel composite for agricultural areas using landsat time series[J]. Remote Sensing, 2017, 9(12): 1245.
+
 [5] Sorenson P T, Shirtliffe S J, Bedard-Haughn A K. Predictive soil mapping using historic bare soil composite imagery and legacy soil survey data[J]. Geoderma, 2021, 401: 115316.
+
 [6] Rogge D, Bauer A, Zeidler J, et al. Building an exposed soil composite processor (SCMaP) for mapping spatial and temporal characteristics of soils with Landsat imagery (1984–2014)[J]. Remote Sensing of Environment, 2018, 205: 1-17.
+
 [7] Zou Z, Dong J, Menarguez M A, et al. Continued decrease of open surface water body area in Oklahoma during 1984–2015[J]. Science of the Total Environment, 2017, 595: 451-460.
 
 ## Contact
-Dr. Jie Xue, Zhejiang Univerisity, E-mail: xj2019@zju.edu.cn
-Prof. Zhou Shi, Zhejiang Univerisity, E-mail: shizhou@zju.edu.cn 
+Dr. Jie Xue, Zhejiang Univerisity, E-mail: xj2019@zju.edu.cn;
+
+Prof. Zhou Shi, Zhejiang Univerisity, E-mail: shizhou@zju.edu.cn.
 
 
