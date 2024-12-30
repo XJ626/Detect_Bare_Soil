@@ -1,0 +1,125 @@
+
+// Error Handling function
+function error(functionName, message) {
+    print('------------------  Sentinel  --------------------');
+    print('Error in function:' + functionName.toString());
+    print(message.toString());
+    print('------------------  Sentinel  --------------------');
+}
+
+/*
+  introduceHarmonizedSentinel2A:
+  Function to introduce Sentinel2_SR_HARMONIZED L2A collections with removing cloud, 
+  cloud shadow and cirrus covering the whole region in certain date ranges.
+  origin from 
+  "https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S2_CLOUD_PROBABILITY"
+  "https://developers.google.com/earth-engine/tutorials/community/sentinel-2-s2cloudless"
+  "https://code.earthengine.google.com/?scriptPath=Examples%3ACloud%20Masking%2FSentinel2%20Cloud%20And%20Shadow"
+  
+  
+  Params:
+  obligatory (String) startdate - The input startdate to define the starttime of filtering.
+  obligatory (String) enddate - The input enddate to define the endtime of filtering. 
+  obligatory (Geometry) region - The input region to define filtering boundary.
+  
+
+  Usage:
+  var DS = require('users/xj2019/Bare_Soil_Detect:lib/Sentinel'); 
+  var Sentinel2 = DS.introduceHarmonizedSentinel2A(startdate, enddate, region);
+*/
+
+var introduceHarmonizedSentinel2A = function (startdate, enddate, region) {
+    // Error Handling
+    if (startdate === undefined) error('introduceSentinel2', 'You need to specify an input startdate.');
+    if (enddate === undefined) error('introduceSentinel2', 'You need to specify an input enddate.');
+    if (region === undefined) error('introduceSentinel2', 'You need to specify an input region.');
+    // Default params
+    var start = ee.String(startdate);
+    var end = ee.String(enddate);
+    region = region;
+    // dataset are needed as input to CDI and the cloud mask function.
+    var s2 = ee.ImageCollection('COPERNICUS/S2');
+    // Cloud probability dataset.  The probability band is used in
+    // the cloud mask function.
+    var s2c = ee.ImageCollection('COPERNICUS/S2_CLOUD_PROBABILITY');
+    // Sentinel-2 surface reflectance data for the composite.
+    var s2Sr = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED');
+    // filter input collections by desired data range and region.
+    var criteria = ee.Filter.and(ee.Filter.bounds(region), ee.Filter.date(start, end));
+    // The masks for the 10m bands sometimes do not exclude bad data at
+    // scene edges, so we apply masks from the 20m and 60m bands as well.
+    function maskEdges(s2_img) {
+      return s2_img.updateMask(s2_img.select('B8A').mask()
+      .updateMask(s2_img.select('B9').mask()));}
+    // Join two collections on their 'system:index' property.
+    // The propertyName parameter is the name of the property
+    // that references the joined image.
+    function indexJoin(collectionA, collectionB, propertyName) {
+      var joined = ee.ImageCollection(ee.Join.saveFirst(propertyName).apply({
+        primary: collectionA,
+        secondary: collectionB,
+        condition: ee.Filter.equals({
+          leftField: 'system:index',
+          rightField: 'system:index'})
+      }));
+      // Merge the bands of the joined image.
+      return joined.map(function(image) {
+        return image.addBands(ee.Image(image.get(propertyName)));});}
+    // Aggressively mask clouds and shadows.
+    function maskImage(image) {
+      // Compute the cloud displacement index from the L1C bands.
+      var cdi = ee.Algorithms.Sentinel2.CDI(image);
+      var s2c = image.select('probability');
+      var cirrus = image.select('B10').multiply(0.0001);
+      // Assume low-to-mid atmospheric clouds to be pixels where probability
+      // is greater than 65%, and CDI is less than -0.5. For higher atmosphere
+      // cirrus clouds, assume the cirrus band is greater than 0.01.
+      // The final cloud mask is one or both of these conditions.
+      var isCloud = s2c.gt(65).and(cdi.lt(-0.5)).or(cirrus.gt(0.01));
+      // Reproject is required to perform spatial operations at 20m scale.
+      // 20m scale is for speed, and assumes clouds don't require 10m precision.
+      isCloud = isCloud.focal_min(3).focal_max(16);
+      isCloud = isCloud.reproject({crs: cdi.projection(), scale: 20});
+
+      // Project shadows from clouds we found in the last step. This assumes we're working in
+      // a UTM projection.
+      var shadowAzimuth = ee.Number(90)
+      .subtract(ee.Number(image.get('MEAN_SOLAR_AZIMUTH_ANGLE')));
+      // With the following reproject, the shadows are projected 5km.
+      isCloud = isCloud.directionalDistanceTransform(shadowAzimuth, 50);
+      isCloud = isCloud.reproject({crs: cdi.projection(), scale: 100});
+      isCloud = isCloud.select('distance').mask();
+      return image.updateMask(isCloud.not());}
+      function multiplyScale (image) {
+        var asset_size = image.get('system:asset_size');
+        var footprint = image.get('system:footprint');
+        var index = image.get('system:index');
+        var time_end = image.get('system:time_end');
+        var time_start = image.get('system:time_start');
+        image = image.select(['B2','B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B8A', 'B11', 'B12'],
+        ['blue', 'green', 'red', 'red_edge1', 'red_edge2', 'red_edge3', 'nir', 'red_edge4', 'swir1', 'swir2'])
+        .multiply(0.0001).copyProperties(image)
+        .set({'system:asset_size': asset_size,
+        'system:footprint': footprint,
+        'system:index': index,
+        'system:time_end': time_end,
+        'system:time_start': time_start});
+        return image;}
+      // S2 L1C for Cloud Displacement Index (CDI) bands.
+      s2 = s2.filter(criteria);
+      // S2Cloudless for the cloud probability band.
+      s2c = s2c.filter(criteria);
+      // S2 L2A for surface reflectance bands.
+      s2Sr = s2Sr.filter(criteria).map(maskEdges);
+      // Join the cloud probability dataset to surface reflectance.
+      var withCloudProbability = indexJoin(s2Sr, s2c, 'cloud_probability');
+      // Join the L1C data to get the bands needed for CDI.
+      var withS2L1C = indexJoin(withCloudProbability, s2, 'l1c');
+      // Map the cloud masking function over the joined collection.
+      var s2final = ee.ImageCollection(withS2L1C.map(multiplyScale));
+  return s2final;
+};
+
+    
+/* ------------------------  EXPORTS  ------------------------ */
+exports.introduceHarmonizedSentinel2A = introduceHarmonizedSentinel2A;
