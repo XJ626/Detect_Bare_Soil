@@ -235,23 +235,23 @@ var SCMaP = function(imagecollection, minthreshold, maxthreshold){
   
   Params:
   obligatory (ImagCollection) imagecollection - The input imagecollection to be used to detect bare soil.
-  obligatory (Number) ndri_threshold - The input minthreshold to limit the NDRI.
+  obligatory (Number) ndrgi_threshold - The input minthreshold to limit the NDRGI.
   obligatory (Number) savi_threshold - The input minthreshold to limit the SAVI.
   obligatory (Number) nbr2_threshold - The input minthreshold to limit the NBR2.
 
   Usage:
   var ATBSD = require('users/xj2019/Bare_Soil_Detetct:lib/BareSoilDetect'); 
-  var TDBSS = ATBSD.TDBSS(imagecollection, ndri_threshold, savi_threshold, nbr2_threshold);
+  var TDBSS = ATBSD.TDBSS(imagecollection, ndrgi_threshold, savi_threshold, nbr2_threshold);
 */
-var TDBSS = function(imagecollection, ndri_threshold, savi_threshold, nbr2_threshold) {
+var TDBSS = function(imagecollection, ndrgi_threshold, savi_threshold, nbr2_threshold) {
   // Error Handling
   if (imagecollection === undefined) error('TDBSS', 'You need to specify an input imagecollection.');
-  if (ndri_threshold === undefined) error('TDBSS', 'You need to specify a specific threshold for NDVI');
+  if (ndrgi_threshold === undefined) error('TDBSS', 'You need to specify a specific threshold for NDRGI');
   if (savi_threshold === undefined) error('TDBSS', 'You need to specify a specific threshold for SAVI');
   if (nbr2_threshold === undefined) error('TDBSS', 'You need to specify a specific threshold for NBR2');
   // Default params
   imagecollection = ee.ImageCollection(imagecollection);
-  var ndri_value = ee.Number(ndri_threshold);
+  var ndrgi_value = ee.Number(ndrgi_threshold);
   var savi_value = ee.Number(savi_threshold);
   var nbr2_value = ee.Number(nbr2_threshold);
   // Function to calculate related spectra indices
@@ -264,8 +264,8 @@ var TDBSS = function(imagecollection, ndri_threshold, savi_threshold, nbr2_thres
       'nir': image.select('nir'),
       'red': image.select('red'),
     }).rename('SAVI');
-  // NDRI
-  var NDRI = image.normalizedDifference(['red', 'green']).rename('NDRI');
+  // NDRGI
+  var NDRGI = image.normalizedDifference(['red', 'green']).rename('NDRGI');
   var GB =  image.select('green').subtract(image.select('blue')).rename('GB');
   var RG =  image.select('red').subtract(image.select('green')).rename('RG');
   var NBR2 = image.normalizedDifference(['swir1', 'swir2']).rename("NBR2");
@@ -276,7 +276,7 @@ var TDBSS = function(imagecollection, ndri_threshold, savi_threshold, nbr2_thres
       'blue': image.select('blue')}).rename('EVI');
   var mNDWI = image.normalizedDifference(['green', 'swir1']).rename('mNDWI');
 
-  return image.addBands([NDVI, SAVI, NDRI, GB, RG, NBR2, EVI, mNDWI]);}  
+  return image.addBands([NDVI, SAVI, NDRGI, GB, RG, NBR2, EVI, mNDWI]);}  
   // detct the water body
   function water_detect(image){
     var water_bol = image.select('mNDWI').gt(image.select('EVI'))
@@ -285,13 +285,13 @@ var TDBSS = function(imagecollection, ndri_threshold, savi_threshold, nbr2_thres
   return image.addBands(water_bol);}
   // function to detect the bare soil
   function detectSoil (image){
-    var NDRIMask = image.select('NDRI').gt(ndri_value);
+    var NDRGIMask = image.select('NDRGI').gt(ndrgi_value);
     var SAVIMask = image.select('SAVI').gt(savi_value);                    
     var GBMask =  image.select('GB').gt(0);
     var RGMask =  image.select('RG').gt(0);
     var NBR2Mask = image.select('NBR2').gt(0)
                         .and(image.select('NBR2').lt(nbr2_threshold));
-    var SoilMask = NDRIMask.and(GBMask).and(RGMask)
+    var SoilMask = NDRGIMask.and(GBMask).and(RGMask)
                            .and(NBR2Mask)
                            .and(SAVIMask)
                            .rename('SoilMask');
